@@ -17,8 +17,24 @@ Scan Example
 <img width="555" height="299" alt="image" src="https://github.com/user-attachments/assets/8b81428f-a1ee-470f-bc9e-aa2909f88ab9" />
 
 
-适用场景
+**适用场景**
 
 Applicable Scenarios
 
-<img width="573" height="402" alt="image" src="https://github.com/user-attachments/assets/1ff9408d-4d60-4136-981a-6e143f9fca78" />
+fscan等二进制被agent检测到了导致无法运行，如下图，或者是魔改的fscan被检测到了，能运行，但是不一会就被agent 杀掉，或者是防守方严格盯屏的严苛场景
+
+The fscan and other binaries were detected by the agent and could not run, as shown in the picture. Alternatively, a modified fscan was detected, could run, but was killed by the agent after a short while, or it was a strict scenario where the defender was closely monitoring the screen.
+下图为fscan被禁止：  
+
+The following figure shows fscan is disabled:
+<img width="759" height="183" alt="image" src="https://github.com/user-attachments/assets/fb1d22ca-882b-4d86-b246-40993cf28542" />
+
+
+下图为魔改的fscan   加敏感参数被禁止运行     以及不加敏感参数 被   agent exit掉:             
+
+The following figure shows that the modified fscan is prohibited from running with sensitive parameters and is exited by the agent without sensitive parameters.:
+
+
+
+<img width="1161" height="954" alt="image" src="https://github.com/user-attachments/assets/2ca8adf8-a57f-4270-b0ce-cc3a3c79400a" />
+
