@@ -1,0 +1,133 @@
+#!/bin/bash
+
+# 检查是否提供了 IP 前缀作为参数
+if [ $# -eq 0 ]; then
+    echo "用法: $0 <IP 前缀> [-all] [-p <端口号列表>]"
+    echo "示例: $0 192.168  # 探测 192.168 开头的 B 段，扫描常见端口"
+    echo "示例: $0 192.168.2 -all  # 探测 192.168.2 开头的 C 段，扫描 1 - 65535 端口"
+    echo "示例: $0 192 -p 21  # 探测 192 开头的 A 段，只扫描 21 端口"
+    echo "示例: $0 192 -p 21,22,23  # 探测 192 开头的 A 段，扫描 21、22、23 端口"
+    exit 1
+fi
+
+# 获取传入的 IP 前缀
+ip=$1
+scan_all_ports=false
+specific_ports=""
+
+# 处理参数
+shift
+while [ $# -gt 0 ]; do
+    case $1 in
+        -all)
+            scan_all_ports=true
+            ;;
+        -p)
+            if [ -n "$2" ]; then
+                specific_ports=$2
+                shift
+            else
+                echo "错误：-p 参数后需要指定端口号列表。"
+                exit 1
+            fi
+            ;;
+        *)
+            echo "未知参数: $1"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# 生成保存结果的文件名
+# 将 ip 中的 . 替换为 _
+filename="${ip}.txt"
+
+# 根据 IP 前缀的点号数量确定需要遍历的位数
+dots=$(echo "$ip" | grep -o "\." | wc -l)
+
+# 定义允许的最大并发数
+MAX_CONCURRENCY=500
+
+# 创建一个命名管道
+tmp_fifo="/tmp/$$.fifo"
+mkfifo "$tmp_fifo"
+exec 6<> "$tmp_fifo"
+rm "$tmp_fifo"
+
+# 预先填充管道，初始信号量
+for ((i = 0; i < MAX_CONCURRENCY; i++)); do
+    echo >&6
+done
+
+# 定义一个函数用于扫描端口
+scan_ports() {
+    local target_ip=$1
+    if [ -n "$specific_ports" ]; then
+        # 将逗号分隔的端口号列表转换为空格分隔
+        ports=$(echo $specific_ports | tr ',' ' ')
+    elif $scan_all_ports; then
+        ports=$(seq 1 65535)
+    else
+        ports="21 22 80 81 135 139 389 443 445 1433 1521 3306 5432 6379 7001 8000 8080 8089 9000 9200 11211 27017"
+    fi
+    for port in $ports; do
+        # 获取一个信号量，没有可用信号量时会阻塞
+        read -u 6
+        (
+            (echo > /dev/tcp/$target_ip/$port) >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                echo "$target_ip:$port Open"
+                echo "$target_ip:$port Open" >> "$filename"
+            fi
+            # 释放一个信号量
+            echo >&6
+        ) &
+    done
+}
+
+case $dots in
+    0)
+        # A 段，需要遍历第二、三、四位
+        for ((i = 0; i <= 254; i++)); do
+            for ((j = 0; j <= 254; j++)); do
+                for ((k = 0; k <= 254; k++)); do
+                    target_ip="${ip}.${i}.${j}.${k}"
+                    # 获取一个信号量，没有可用信号量时会阻塞
+                    read -u 6
+                    scan_ports "$target_ip" &
+                done
+            done
+        done
+        ;;
+    1)
+        # B 段，需要遍历第三、四位
+        for ((j = 0; j <= 254; j++)); do
+            for ((k = 0; k <= 254; k++)); do
+                target_ip="${ip}.${j}.${k}"
+                # 获取一个信号量，没有可用信号量时会阻塞
+                read -u 6
+                scan_ports "$target_ip" &
+            done
+        done
+        ;;
+    2)
+        # C 段，需要遍历第四位
+        for ((k = 0; k <= 254; k++)); do
+            target_ip="${ip}.${k}"
+            # 获取一个信号量，没有可用信号量时会阻塞
+            read -u 6
+            scan_ports "$target_ip" &
+        done
+        ;;
+    *)
+        echo "不支持的 IP 前缀格式，请输入正确的 A、B 或 C 段 IP 前缀。"
+        exit 1
+        ;;
+esac
+
+# 等待所有后台任务完成
+wait
+
+# 关闭文件描述符
+exec 6>&-
